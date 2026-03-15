@@ -33,7 +33,7 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
-    if: ${{ github.event.head_commit.message != 'Update hash file' }}
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(hash):') }}
 
     outputs:
       hash_content: ${{ steps.read_hash.outputs.hash_content }}
@@ -99,11 +99,24 @@ jobs:
         with:
           repository: innei-dev/shiroi
           token: ${{ secrets.GH_PAT }}
+          ref: ${{ needs.check.outputs.sha_short }}
           fetch-depth: 1
           lfs: true
 
       - name: Checkout LFS objects
         run: git lfs checkout
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -190,11 +203,13 @@ jobs:
         run: echo $SHA_SHORT > ${{ env.HASH_FILE }}
 
       - name: Commit files
+        env:
+          SHA_SHORT: ${{ needs.build.outputs.sha_short }}
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add ${{ env.HASH_FILE }}
-          git commit -m "Update hash file"
+          git commit -m "chore(hash): update to $SHA_SHORT"
 
       - name: Push changes
         uses: ad-m/github-push-action@master
