@@ -54,6 +54,7 @@ jobs:
     needs: prepare
     outputs:
       canceled: ${{ steps.compare.outputs.canceled }}
+      sha_full: ${{ steps.compare.outputs.sha_full }}
       sha_short: ${{ steps.compare.outputs.sha_short }}
 
     steps:
@@ -71,10 +72,13 @@ jobs:
           FORCE_BUILD: ${{ github.event.inputs.force_build }}
         run: |
           file_hash=$FILE_HASH
+          current_sha=$(git rev-parse HEAD)
           current_hash=$(git rev-parse --short HEAD)
           echo "File Hash: $file_hash"
+          echo "Current Git SHA: $current_sha"
           echo "Current Git Hash: $current_hash"
           echo "Force Build: $FORCE_BUILD"
+          echo "sha_full=$current_sha" >> "$GITHUB_OUTPUT"
           echo "sha_short=$current_hash" >> "$GITHUB_OUTPUT"
           if [ "$FORCE_BUILD" == "true" ]; then
             echo "Force build enabled. Continuing workflow."
@@ -99,7 +103,7 @@ jobs:
         with:
           repository: innei-dev/shiroi
           token: ${{ secrets.GH_PAT }}
-          ref: ${{ needs.check.outputs.sha_short }}
+          ref: ${{ needs.check.outputs.sha_full }}
           fetch-depth: 1
           lfs: true
 
