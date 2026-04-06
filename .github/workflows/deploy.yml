@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: innei-dev/shiroi
+          repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
           lfs: true
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: innei-dev/shiroi
+          repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.check.outputs.sha_full }}
           fetch-depth: 1
