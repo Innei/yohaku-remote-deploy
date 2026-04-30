@@ -339,3 +339,127 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
+
+  notify-failure:
+    name: Notify Telegram (on failure)
+    runs-on: ubuntu-latest
+    needs: [prepare, check, build, deploy, store]
+    if: ${{ always() && (needs.prepare.result == 'failure' || needs.check.result == 'failure' || needs.build.result == 'failure' || needs.deploy.result == 'failure' || needs.store.result == 'failure') }}
+
+    steps:
+      - name: Notify Telegram
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          RES_PREPARE: ${{ needs.prepare.result }}
+          RES_CHECK: ${{ needs.check.result }}
+          RES_BUILD: ${{ needs.build.result }}
+          RES_DEPLOY: ${{ needs.deploy.result }}
+          RES_STORE: ${{ needs.store.result }}
+          SHA_SHORT: ${{ needs.check.outputs.sha_short || '' }}
+          SHA_FULL: ${{ needs.check.outputs.sha_full || '' }}
+          APP_REPO_SLUG: innei-dev/yohaku
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          COMMIT_MSG_HEAD: ${{ github.event_name == 'push' && github.event.head_commit.message || '' }}
+        run: |
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            echo "::notice::TELEGRAM_BOT_TOKEN is not set; skipping Telegram notification."
+            exit 0
+          fi
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          COMMIT_URL="https://github.com/${APP_REPO_SLUG}/commit/${SHA_FULL}"
+          COMPLETED_AT="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          export RUN_URL COMMIT_URL COMPLETED_AT
+
+          MSG="$(python3 <<'PY'
+          import html
+          import os
+
+          def esc(s: str) -> str:
+              return html.escape(s or "", quote=False)
+
+          jobs = [
+              ("prepare", os.environ.get("RES_PREPARE") or ""),
+              ("check", os.environ.get("RES_CHECK") or ""),
+              ("build", os.environ.get("RES_BUILD") or ""),
+              ("deploy", os.environ.get("RES_DEPLOY") or ""),
+              ("store", os.environ.get("RES_STORE") or ""),
+          ]
+          failed = [name for name, r in jobs if r == "failure"]
+          failed_line = esc(", ".join(failed) if failed else "unknown")
+
+          sha_short = (os.environ.get("SHA_SHORT") or "").strip()
+          sha_full = (os.environ.get("SHA_FULL") or "").strip()
+          sha_short_disp = esc(sha_short) if sha_short else "—"
+          sha_blob = ""
+          if sha_full:
+              sha_blob = (
+                  f"{os.environ['APP_REPO_SLUG']} @ <code>{sha_short_disp}</code> · "
+                  f"<code>{esc(sha_full[:7])}</code>…\n"
+                  f'<a href="{os.environ["COMMIT_URL"]}">打开 innei-dev/yohaku 提交</a>'
+              )
+          else:
+              sha_blob = "（本次运行未完成构建，或无可用提交 SHA）"
+
+          repo = esc(os.environ["GITHUB_REPOSITORY"])
+          ref = esc(os.environ["GITHUB_REF_NAME"])
+          actor = esc(os.environ["GITHUB_ACTOR"])
+          event = esc(os.environ["GITHUB_EVENT_NAME"])
+          wf = esc(os.environ["GITHUB_WORKFLOW"])
+          rn = esc(os.environ["GITHUB_RUN_NUMBER"])
+          ra = esc(os.environ["GITHUB_RUN_ATTEMPT"])
+          run_url = os.environ["RUN_URL"]
+          completed = esc(os.environ["COMPLETED_AT"])
+          sha_ci = esc(os.environ["GITHUB_SHA"][:40])
+
+          head_msg = (os.environ.get("COMMIT_MSG_HEAD") or "").strip()
+          head_preview = ""
+          if head_msg:
+              first = head_msg.splitlines()[0]
+              one_line = first[:220]
+              if len(first) > 220:
+                  one_line += "…"
+              head_preview = f"<b>编排仓库 HEAD 说明</b>\n{esc(one_line)}"
+
+          parts: list[str] = [
+              "<b>❌ yohaku 部署 / CI 失败</b>",
+              f"<b>失败的 job</b>: <code>{failed_line}</code>",
+              "",
+              "<b>📎 应用源码（若已解析到提交）</b>",
+              sha_blob,
+              "",
+              "<b>🔧 编排仓库 / CI 上下文</b>",
+              f"• 仓库: <code>{repo}</code>",
+              f"• 分支 / ref: <code>{ref}</code>",
+              f"• 触发者 · 事件: {actor} · <code>{event}</code>",
+              f"• Workflow: {wf} · #{rn} · attempt <code>{ra}</code>",
+              f"• 编排仓库 <code>GITHUB_SHA</code>: <code>{sha_ci}</code>",
+          ]
+
+          if head_preview:
+              parts.extend(["", head_preview])
+
+          parts.extend(
+              [
+                  "",
+                  f"<b>🕐 时间（UTC）</b> {completed}",
+                  "",
+                  f'<a href="{run_url}">在 GitHub Actions 打开本次运行</a>',
+              ]
+          )
+
+          print("\n".join(parts))
+          PY
+          )"
+
+          jq -n \
+            --arg text "$MSG" \
+            '{chat_id: "@order_usagi", text: $text, parse_mode: "HTML", disable_web_page_preview: true}' \
+            | curl -sS -f -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d @-
