@@ -127,7 +127,7 @@ yohaku-remote-deploy  ship.yml
 fingerprint == baseline ? OTA : TestFlight
 ```
 
-TestFlight 本身：`macos-26` 上 `expo prebuild`（`ios/` 不进源仓），再 `xcodebuild archive` + `exportArchive`。上传后最多等待 45 分钟；Apple 处理失败或超时均不会更新 OTA runtime 基线。
+TestFlight 本身：`xcode-27` runner 上 `expo prebuild`（`ios/` 不进源仓），再 `xcodebuild archive` + `exportArchive`。上传后最多等待 45 分钟；Apple 处理失败或超时均不会更新 OTA runtime 基线。
 
 不跟 `build_hash.*` 去重。`CURRENT_PROJECT_VERSION` 使用预留的 build cursor。同一时间只跑一条 TestFlight。
 
