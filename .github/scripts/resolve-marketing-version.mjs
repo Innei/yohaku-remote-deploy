@@ -133,6 +133,10 @@ async function main() {
     bundleId: requiredEnvironment('APP_BUNDLE_ID'),
     client,
   })
+  console.log(
+    `App Store versions for ${requiredEnvironment('APP_BUNDLE_ID')}: ` +
+      (versions.map((version) => `${version.versionString}=${version.state}`).join(', ') || 'none'),
+  )
   const resolved = resolveOpenVersion(currentVersion, versions)
 
   if (resolved === currentVersion) {
