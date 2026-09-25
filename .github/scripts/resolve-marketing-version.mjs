@@ -5,11 +5,17 @@ import { createAppStoreClient } from './wait-for-app-store-build.mjs'
 
 const GITHUB_API_ORIGIN = 'https://api.github.com'
 
-// Apple rejects new builds for a train once its version has shipped. Every
-// other state (including unknown future ones) still accepts uploads, so an
-// unrecognised state must never trigger a bump.
+// Apple rejects new builds for a train once review approves its version, even
+// before release. Every other state (including unknown future ones) still
+// accepts uploads, so an unrecognised state must never trigger a bump.
 const CLOSED_VERSION_STATES = new Set([
+  'ACCEPTED',
   'DEVELOPER_REMOVED_FROM_SALE',
+  'PENDING_APPLE_RELEASE',
+  'PENDING_DEVELOPER_RELEASE',
+  'PREORDER_READY_FOR_SALE',
+  'PROCESSING_FOR_APP_STORE',
+  'PROCESSING_FOR_DISTRIBUTION',
   'READY_FOR_DISTRIBUTION',
   'READY_FOR_SALE',
   'REMOVED_FROM_SALE',

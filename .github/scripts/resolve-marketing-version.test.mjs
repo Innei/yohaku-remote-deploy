@@ -23,6 +23,12 @@ test('skips every released train', () => {
   assert.equal(resolveOpenVersion('1.0.1', versions), '1.0.3')
 })
 
+test('skips trains approved but not yet released', () => {
+  for (const state of ['ACCEPTED', 'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE', 'PROCESSING_FOR_DISTRIBUTION']) {
+    assert.equal(resolveOpenVersion('1.0.2', [{ state, versionString: '1.0.2' }]), '1.0.3', state)
+  }
+})
+
 test('treats unknown states as open', () => {
   assert.equal(
     resolveOpenVersion('1.0.1', [{ state: 'SOME_FUTURE_STATE', versionString: '1.0.1' }]),
