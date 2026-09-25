@@ -29,6 +29,21 @@ test('skips trains approved but not yet released', () => {
   }
 })
 
+test('builds above a released train when the current version was skipped', () => {
+  const versions = [
+    { state: 'READY_FOR_DISTRIBUTION', versionString: '1.0.3' },
+    { state: 'READY_FOR_DISTRIBUTION', versionString: '1.0.1' },
+  ]
+  assert.equal(resolveOpenVersion('1.0.2', versions), '1.0.4')
+})
+
+test('keeps a current version already above every closed train', () => {
+  assert.equal(
+    resolveOpenVersion('1.1.0', [{ state: 'READY_FOR_DISTRIBUTION', versionString: '1.0.9' }]),
+    '1.1.0',
+  )
+})
+
 test('treats unknown states as open', () => {
   assert.equal(
     resolveOpenVersion('1.0.1', [{ state: 'SOME_FUTURE_STATE', versionString: '1.0.1' }]),

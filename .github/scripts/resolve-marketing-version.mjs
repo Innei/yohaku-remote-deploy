@@ -22,27 +22,38 @@ const CLOSED_VERSION_STATES = new Set([
   'REPLACED_WITH_NEW_VERSION',
 ])
 
-export function bumpPatch(version) {
+function parseVersion(version) {
   const parts = version.split('.').map(Number)
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
     throw new Error(`Not a three-part version: ${version}`)
   }
-  return `${parts[0]}.${parts[1]}.${parts[2] + 1}`
+  return parts
 }
 
-export function resolveOpenVersion(currentVersion, versions) {
-  const closed = new Set(
-    versions
-      .filter((version) => CLOSED_VERSION_STATES.has(version.state))
-      .map((version) => version.versionString),
-  )
-
-  let candidate = currentVersion
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (!closed.has(candidate)) return candidate
-    candidate = bumpPatch(candidate)
+function compareVersions(a, b) {
+  const left = parseVersion(a)
+  const right = parseVersion(b)
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index]
   }
-  throw new Error(`Could not find an open App Store train above ${currentVersion}`)
+  return 0
+}
+
+export function bumpPatch(version) {
+  const [major, minor, patch] = parseVersion(version)
+  return `${major}.${minor}.${patch + 1}`
+}
+
+// Apple only accepts builds above the highest closed train, so a version that
+// was skipped (never submitted) below a shipped one is closed too.
+export function resolveOpenVersion(currentVersion, versions) {
+  const highestClosed = versions
+    .filter((version) => CLOSED_VERSION_STATES.has(version.state) && version.versionString)
+    .map((version) => version.versionString)
+    .reduce((highest, version) => (!highest || compareVersions(version, highest) > 0 ? version : highest), null)
+
+  if (!highestClosed || compareVersions(currentVersion, highestClosed) > 0) return currentVersion
+  return bumpPatch(highestClosed)
 }
 
 export async function readAppStoreVersions({ bundleId, client }) {
