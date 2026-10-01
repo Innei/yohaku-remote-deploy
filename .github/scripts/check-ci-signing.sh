@@ -44,7 +44,7 @@ printf '%s\n' 'int main(void) { return 0; }' > "$RUNNER_TEMP/check-probe.c"
 xcrun clang "$RUNNER_TEMP/check-probe.c" -o "$RUNNER_TEMP/check-probe"
 security find-certificate -c 'Apple Distribution' -p "$keychain" > "$RUNNER_TEMP/check-leaf.pem"
 openssl x509 -in "$RUNNER_TEMP/check-leaf.pem" -noout -issuer -dates
-security verify-cert -c "$RUNNER_TEMP/check-leaf.pem" -k "$keychain" -L -p codeSign -v
-codesign --force --timestamp=none --sign "$identity" --keychain "$keychain" "$RUNNER_TEMP/check-probe"
+security verify-cert -c "$RUNNER_TEMP/check-leaf.pem" -k "$keychain" -L -p codeSign
+codesign --force --timestamp=none --sign "$identity" "$RUNNER_TEMP/check-probe"
 codesign --verify --strict "$RUNNER_TEMP/check-probe"
 echo 'CI distribution certificate import and codesign verified without publishing.'
