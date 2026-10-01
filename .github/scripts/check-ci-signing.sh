@@ -14,7 +14,7 @@ if path.exists():
     subprocess.run(['security','list-keychains','-d','user','-s',*shlex.split(path.read_text())], check=True)
 PYCLEAN
   security delete-keychain "$keychain" || true
-  rm -f "$RUNNER_TEMP/check-dist.p12" "$RUNNER_TEMP/check-probe" "$RUNNER_TEMP/check-probe.c" "$RUNNER_TEMP/check-original-keychains.txt"
+  rm -f "$RUNNER_TEMP/check-dist.p12" "$RUNNER_TEMP/check-probe" "$RUNNER_TEMP/check-probe.c" "$RUNNER_TEMP/check-original-keychains.txt" "$RUNNER_TEMP/check-leaf.pem"
   python3 /Users/ci/ci-self/bin/signing-lock.py release
 }
 trap cleanup EXIT
@@ -42,6 +42,9 @@ if [ -z "$identity" ]; then
 fi
 printf '%s\n' 'int main(void) { return 0; }' > "$RUNNER_TEMP/check-probe.c"
 xcrun clang "$RUNNER_TEMP/check-probe.c" -o "$RUNNER_TEMP/check-probe"
+security find-certificate -c 'Apple Distribution' -p "$keychain" > "$RUNNER_TEMP/check-leaf.pem"
+openssl x509 -in "$RUNNER_TEMP/check-leaf.pem" -noout -issuer -dates
+security verify-cert -c "$RUNNER_TEMP/check-leaf.pem" -k "$keychain" -L -p codeSign -v
 codesign --force --timestamp=none --sign "$identity" --keychain "$keychain" "$RUNNER_TEMP/check-probe"
 codesign --verify --strict "$RUNNER_TEMP/check-probe"
 echo 'CI distribution certificate import and codesign verified without publishing.'
