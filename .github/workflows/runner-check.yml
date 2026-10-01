@@ -103,6 +103,16 @@ jobs:
           DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
         run: /bin/bash .deploy/.github/scripts/check-ci-signing.sh
 
+  docker:
+    name: Verify independent CI Docker
+    runs-on: [self-hosted, macOS, ARM64, ci-account, validation-yohaku-remote-deploy]
+    timeout-minutes: 15
+    steps:
+      - name: Verify ci Docker account
+        run: |
+          test "$(id -un)" = ci
+          test "$HOME" = /Users/ci
+
       - name: Prepare isolated Docker configuration
         id: docker
         run: |
