@@ -121,6 +121,11 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "host=$docker_host" >> "$GITHUB_OUTPUT"
 
+      - name: Enable linux/amd64 emulation in CI Docker
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: amd64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
         with:
