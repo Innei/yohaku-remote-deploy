@@ -24,7 +24,8 @@ security unlock-keychain -p "$password" "$keychain"
 printf '%s' "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/check-dist.p12"
 security import "$RUNNER_TEMP/check-dist.p12" -k "$keychain" -P "$DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
 security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
-identity="$(security find-identity -v -p codesigning "$keychain" | awk '/Apple Distribution:/{print $2; exit}')"
+identities="$(security find-identity -v -p codesigning "$keychain")"
+identity="$(awk '/Apple Distribution:/{print $2; exit}' <<< "$identities")"
 test -n "$identity"
 printf '%s\n' 'int main(void) { return 0; }' > "$RUNNER_TEMP/check-probe.c"
 xcrun clang "$RUNNER_TEMP/check-probe.c" -o "$RUNNER_TEMP/check-probe"
