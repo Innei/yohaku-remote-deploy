@@ -29,22 +29,18 @@ subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', keychain, *ori
 PYKEYCHAIN
 printf '%s' "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/check-dist.p12"
 security import "$RUNNER_TEMP/check-dist.p12" -k "$keychain" -P "$DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
-/bin/bash "$(dirname "$0")/import-apple-intermediates.sh" "$keychain"
 security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
 identities="$(security find-identity -v -p codesigning "$keychain")"
 identity="$(awk '/Apple Distribution:/{print $2; exit}' <<< "$identities")"
 if [ -z "$identity" ]; then
   printf '%s\n' "$identities"
-  security find-identity -p codesigning "$keychain"
-  security find-certificate -c 'Apple Distribution' -p "$keychain" | openssl x509 -noout -issuer -dates
-  echo '::error::No valid Apple Distribution identity after importing the certificate chain.'
+  echo '::error::No valid Apple Distribution identity. Check the machine Apple WWDR bootstrap.'
   exit 1
 fi
-printf '%s\n' 'int main(void) { return 0; }' > "$RUNNER_TEMP/check-probe.c"
-xcrun clang "$RUNNER_TEMP/check-probe.c" -o "$RUNNER_TEMP/check-probe"
 security find-certificate -c 'Apple Distribution' -p "$keychain" > "$RUNNER_TEMP/check-leaf.pem"
-openssl x509 -in "$RUNNER_TEMP/check-leaf.pem" -noout -issuer -dates
-security verify-cert -c "$RUNNER_TEMP/check-leaf.pem" -k "$keychain" -L -p codeSign
+security verify-cert -c "$RUNNER_TEMP/check-leaf.pem" -L -p codeSign
+printf '%s\n' 'int main(void) { return 0; }' > "$RUNNER_TEMP/check-probe.c"
+xcrun --sdk iphoneos clang -target arm64-apple-ios17.0 "$RUNNER_TEMP/check-probe.c" -o "$RUNNER_TEMP/check-probe"
 codesign --force --timestamp=none --sign "$identity" "$RUNNER_TEMP/check-probe"
 codesign --verify --strict "$RUNNER_TEMP/check-probe"
-echo 'CI distribution certificate import and codesign verified without publishing.'
+echo 'CI distribution certificate and real iOS codesign verified without publishing.'
