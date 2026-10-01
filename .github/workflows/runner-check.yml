@@ -13,11 +13,24 @@ concurrency:
 jobs:
   check:
     name: Verify local CI environment
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
-    timeout-minutes: 30
+    runs-on: [self-hosted, macOS, ARM64, ci-account, validation-yohaku-remote-deploy]
+    timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
     steps:
+      - name: Verify isolated ci account
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = ci
+          test "$HOME" = /Users/ci
+          test -z "${GIT_CONFIG_GLOBAL:-}"
+          case "$PATH" in *'/Users/innei/'*) echo 'Personal tool path inherited'; exit 1;; esac
+          if git config --global --name-only --get-regexp '^(include|http\..*extraheader)'; then
+            echo 'Unexpected global Git authentication/include configuration'
+            exit 1
+          fi
+          id
+          echo "CI HOME=$HOME"
       - name: Verify local tools
         run: |
           set -euo pipefail
@@ -39,9 +52,17 @@ jobs:
         with:
           repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
+          persist-credentials: false
           ref: main
           lfs: true
           submodules: recursive
+
+      - name: Checkout deploy scripts (nested checkout regression)
+        uses: actions/checkout@v6
+        with:
+          path: .deploy
+          persist-credentials: false
+          sparse-checkout: .github/scripts
 
       - uses: pnpm/action-setup@v6
         with:
@@ -67,6 +88,20 @@ jobs:
           hash="$(jq -r .hash "$RUNNER_TEMP/fp.json")"
           [[ "$hash" =~ ^[a-zA-Z0-9]{16,}$ ]]
           echo "iOS runtime fingerprint: $hash"
+
+      - name: Generate native iOS project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios --non-interactive --no-install
+
+      - name: Install iOS Pods
+        working-directory: apps/mobile/ios
+        run: pod install --deployment || pod install
+
+      - name: Verify CI distribution signing
+        env:
+          DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: /bin/bash .deploy/.github/scripts/check-ci-signing.sh
 
       - name: Prepare isolated Docker configuration
         id: docker
