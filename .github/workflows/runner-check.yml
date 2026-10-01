@@ -101,6 +101,11 @@ jobs:
         env:
           DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
           DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE }}
+          EXTENSION_PROFILE_BASE64: ${{ secrets.IOS_NOTIFICATION_SERVICE_PROFILE }}
+          APPLE_TEAM_ID: KAMM5N88X3
+          YOHAKU_BUNDLE_ID: in.innei
+          YOHAKU_EXTENSION_BUNDLE_ID: in.innei.notification-service
         run: /bin/bash .deploy/.github/scripts/check-ci-signing.sh
 
   docker:

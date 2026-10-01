@@ -389,8 +389,9 @@ jobs:
               echo "$label decoded profile is ${decoded_size} bytes; expected base64 of a .mobileprovision." >&2
               return 1
             fi
-            if ! security cms -D -i "$profile_path" > "$profile_plist"; then
-              echo "$label is not a valid CMS provisioning profile." >&2
+            # A headless CI account has no default keychain for CMS certificate imports.
+            if ! security cms -D -k "$keychain_path" -i "$profile_path" > "$profile_plist"; then
+              echo "Could not decode $label CMS provisioning profile using the CI keychain." >&2
               return 1
             fi
 
