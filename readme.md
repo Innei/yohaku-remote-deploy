@@ -106,8 +106,8 @@ build_hash.remix       # remix route 去重指针（CI 自动维护）
 
 不用 EAS。`ship.yml` 先算 `@expo/fingerprint@0.20.2`，和仓库变量 `YOHAKU_IOS_FINGERPRINT` 比较：
 
-- 相同 → Ubuntu 跑 `easc update --channel production`（`Innei/expo-ota`）
-- 缺失 / 不同 / `force_testflight` → 现有 macos TestFlight；上传后等待 App Store Connect
+- 相同 → 本机 self-hosted runner 跑 `easc update --channel production`（`Innei/expo-ota`）
+- 缺失 / 不同 / `force_testflight` → 本机 Xcode 27 TestFlight；上传后等待 App Store Connect
   确认目标构建达到 `VALID` / `IN_BETA_TESTING`，再写回该变量
 
 `runtimeVersion.policy` 是 `fingerprint`。旧 `1.0.0` 包只吃旧 runtime 的 OTA。
@@ -127,7 +127,7 @@ yohaku-remote-deploy  ship.yml
 fingerprint == baseline ? OTA : TestFlight
 ```
 
-TestFlight 本身：`xcode-27` runner 上 `expo prebuild`（`ios/` 不进源仓），再 `xcodebuild archive` + `exportArchive`。上传后最多等待 45 分钟；Apple 处理失败或超时均不会更新 OTA runtime 基线。
+TestFlight 本身：`[self-hosted, macOS, ARM64, yohaku-remote-deploy]` runner 上 `expo prebuild`（`ios/` 不进源仓），再 `xcodebuild archive` + `exportArchive`。上传后最多等待 45 分钟；Apple 处理失败或超时均不会更新 OTA runtime 基线。
 
 不跟 `build_hash.*` 去重。`CURRENT_PROJECT_VERSION` 使用预留的 build cursor。同一时间只跑一条 TestFlight。
 
@@ -186,3 +186,19 @@ TestFlight 本身：`xcode-27` runner 上 `expo prebuild`（`ios/` 不进源仓�
 2. 删 `deploy-main.yml` 中 `:nextjs` tag（保留 `:latest` `:main` `:main-<sha>`）
 3. Dokploy 删 remix application，main application `dockerImage` 不需要改
 4. yohaku 仓 `notify-remote-deploy.yml` 去掉 `refactor/remix` 分支
+
+## 本机 self-hosted CI
+
+四个业务 workflow 的全部 job 都使用
+`runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]`，注册在
+`Innei/yohaku-remote-deploy` 的专用 runner 为
+`innei-yohaku-remote-deploy-arm64`。
+
+- 安装目录：`/Users/innei/ci-self/yohaku-remote-deploy/runner`
+- 用户 LaunchAgent：登录后自动启动；机器与 OrbStack 须保持在线
+- iOS：使用 `/Applications/Xcode.app` 的 Xcode 27，不修改系统 Xcode 选择；签名后恢复原 keychain 列表和 provisioning profiles
+- Docker：使用当前 Docker context 的 daemon，认证与 Buildx 配置放在 job 临时目录；镜像固定为 `linux/amd64`
+- 一个 runner 每次执行一个 job，各 workflow 可排队
+
+`Self-hosted runner check` 可手动运行，验证私有源仓 checkout、移动端依赖与
+fingerprint、CocoaPods/Xcode 和 `linux/amd64` Docker 构建，不触发发布或通知。

@@ -57,7 +57,7 @@ env:
 jobs:
   resolve:
     name: Resolve source
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     outputs:
       source_ref: ${{ steps.ref.outputs.source_ref }}
       notes: ${{ steps.ref.outputs.notes }}
@@ -109,7 +109,7 @@ jobs:
 
   fingerprint:
     name: Resolve iOS runtime fingerprint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: resolve
     outputs:
       hash: ${{ steps.fp.outputs.hash }}
@@ -163,7 +163,7 @@ jobs:
 
   submit:
     name: Archive and upload
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: [resolve, fingerprint]
     timeout-minutes: 120
     outputs:
@@ -172,6 +172,7 @@ jobs:
       source_sha: ${{ steps.meta.outputs.source_sha }}
       source_short: ${{ steps.meta.outputs.source_short }}
     env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
       EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ needs.fingerprint.outputs.hash }}
     steps:
       - name: Checkout source
@@ -193,9 +194,10 @@ jobs:
           echo "source_short=$source_short" >> "$GITHUB_OUTPUT"
           echo "Resolved ${{ env.APP_REPO_SLUG }}@$source_short"
 
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '27.0'
+      - name: Verify local Xcode
+        run: |
+          xcodebuild -version
+          xcodebuild -version | grep -q '^Xcode 27\.'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -328,10 +330,16 @@ jobs:
           legacy_profiles="$HOME/Library/MobileDevice/Provisioning Profiles"
           xcode_profiles="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 
+          security list-keychains -d user > "$RUNNER_TEMP/original-keychains.txt"
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          python3 <<'PYKEYCHAIN'
+          import os, pathlib, shlex, subprocess
+          original = shlex.split(pathlib.Path(os.environ["RUNNER_TEMP"], "original-keychains.txt").read_text())
+          subprocess.run(["security", "list-keychains", "-d", "user", "-s",
+                          os.path.join(os.environ["RUNNER_TEMP"], "ci.keychain-db"), *original], check=True)
+          PYKEYCHAIN
 
           printf '%s' "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
           security import "$RUNNER_TEMP/dist.p12" \
@@ -420,8 +428,22 @@ jobs:
               fi
             fi
 
-            cp "$profile_path" "$legacy_profiles/$profile_uuid.mobileprovision"
-            cp "$profile_path" "$xcode_profiles/$profile_uuid.mobileprovision"
+            # Preserve profiles already installed for local development.
+            backup_dir="$RUNNER_TEMP/original-profiles/$profile_uuid"
+            mkdir -p "$backup_dir"
+            for scope in legacy xcode; do
+              if [ "$scope" = legacy ]; then
+                destination="$legacy_profiles/$profile_uuid.mobileprovision"
+              else
+                destination="$xcode_profiles/$profile_uuid.mobileprovision"
+              fi
+              if [ -f "$destination" ]; then
+                cp "$destination" "$backup_dir/$scope.mobileprovision"
+              else
+                touch "$backup_dir/$scope.absent"
+              fi
+              cp "$profile_path" "$destination"
+            done
             printf '%s\n%s\n' "$profile_name" "$profile_uuid"
           }
 
@@ -568,19 +590,35 @@ jobs:
       - name: Clean up signing assets
         if: always()
         run: |
+          python3 <<'PYRESTORE'
+          import os, pathlib, shlex, shutil, subprocess
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          saved = temp / "original-keychains.txt"
+          if saved.exists():
+              subprocess.run(["security", "list-keychains", "-d", "user", "-s",
+                              *shlex.split(saved.read_text())], check=True)
+          directories = {
+              "legacy": pathlib.Path.home() / "Library/MobileDevice/Provisioning Profiles",
+              "xcode": pathlib.Path.home() / "Library/Developer/Xcode/UserData/Provisioning Profiles",
+          }
+          for backup in (temp / "original-profiles").glob("*"):
+              for scope, directory in directories.items():
+                  destination = directory / f"{backup.name}.mobileprovision"
+                  original = backup / f"{scope}.mobileprovision"
+                  if original.exists():
+                      shutil.copy2(original, destination)
+                  elif (backup / f"{scope}.absent").exists():
+                      destination.unlink(missing_ok=True)
+          PYRESTORE
           security delete-keychain "$RUNNER_TEMP/ci.keychain-db" || true
           rm -f "$RUNNER_TEMP/dist.p12" "$RUNNER_TEMP"/AuthKey_*.p8
           rm -f "$RUNNER_TEMP"/*.mobileprovision "$RUNNER_TEMP/app.plist" "$RUNNER_TEMP/notification-service.plist"
-          for uuid in "${IOS_APP_PROFILE_UUID:-}" "${IOS_EXTENSION_PROFILE_UUID:-}"; do
-            if [[ "$uuid" =~ ^[0-9A-Fa-f-]{36}$ ]]; then
-              rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
-              rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"
-            fi
-          done
+          rm -rf "$RUNNER_TEMP/original-profiles"
+          rm -f "$RUNNER_TEMP/original-keychains.txt"
 
   app-store:
     name: Confirm TestFlight availability
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: submit
     timeout-minutes: 50
     steps:
@@ -604,7 +642,7 @@ jobs:
 
   record-baseline:
     name: Record iOS fingerprint baseline
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: [fingerprint, submit, app-store]
     if: ${{ needs.app-store.result == 'success' }}
     permissions:
@@ -625,7 +663,7 @@ jobs:
 
   notify:
     name: Notify Telegram
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: [resolve, submit, app-store]
     if: ${{ always() && needs.resolve.result == 'success' }}
     steps:

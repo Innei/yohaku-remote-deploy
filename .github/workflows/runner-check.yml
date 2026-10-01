@@ -1,0 +1,100 @@
+name: Self-hosted runner check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Verify local CI environment
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    steps:
+      - name: Verify local tools
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcodebuild -version | grep -q '^Xcode 27\.'
+          xcrun --sdk iphoneos --show-sdk-version
+          pod --version
+          git lfs version
+          jq --version
+          gh --version
+          python3 --version
+          xcbeautify --version
+
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          repository: innei-dev/yohaku
+          token: ${{ secrets.GH_PAT }}
+          ref: main
+          lfs: true
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install mobile dependencies
+        run: |
+          ln -sfn ../node_modules yohaku-oss/node_modules
+          pnpm install --frozen-lockfile --filter @yohaku/mobile...
+
+      - name: Verify iOS runtime fingerprint
+        working-directory: apps/mobile
+        run: |
+          ./node_modules/.bin/fingerprint fingerprint:generate --platform ios > "$RUNNER_TEMP/fp.json"
+          hash="$(jq -r .hash "$RUNNER_TEMP/fp.json")"
+          [[ "$hash" =~ ^[a-zA-Z0-9]{16,}$ ]]
+          echo "iOS runtime fingerprint: $hash"
+
+      - name: Prepare isolated Docker configuration
+        id: docker
+        run: |
+          set -euo pipefail
+          docker_host="$(docker context inspect "$(docker context show)" --format '{{.Endpoints.docker.Host}}')"
+          docker_config="$(mktemp -d "$RUNNER_TEMP/docker.XXXXXX")"
+          mkdir -p "$docker_config/cli-plugins"
+          if [ -x "$HOME/.docker/cli-plugins/docker-buildx" ]; then
+            cp "$HOME/.docker/cli-plugins/docker-buildx" "$docker_config/cli-plugins/docker-buildx"
+          fi
+          {
+            echo "DOCKER_HOST=$docker_host"
+            echo "DOCKER_CONFIG=$docker_config"
+          } >> "$GITHUB_ENV"
+          echo "host=$docker_host" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          endpoint: ${{ steps.docker.outputs.host }}
+
+      - name: Prepare Docker smoke build
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-smoke"
+          cat > "$RUNNER_TEMP/docker-smoke/Dockerfile" <<'DOCKERFILE'
+          FROM alpine:3.22
+          RUN test "$(uname -m)" = x86_64
+          DOCKERFILE
+
+      - name: Verify linux/amd64 Docker build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/docker-smoke
+          platforms: linux/amd64
+          push: false

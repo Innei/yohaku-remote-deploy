@@ -41,7 +41,7 @@ env:
 jobs:
   resolve:
     name: Resolve source
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     outputs:
       source_ref: ${{ steps.ref.outputs.source_ref }}
       notes: ${{ steps.ref.outputs.notes }}
@@ -104,7 +104,7 @@ jobs:
 
   decide:
     name: Decide OTA or TestFlight
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: resolve
     outputs:
       route: ${{ steps.route.outputs.route }}
@@ -178,7 +178,7 @@ jobs:
 
   ota:
     name: Publish OTA
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: [resolve, decide]
     if: ${{ needs.decide.outputs.route == 'ota' }}
     timeout-minutes: 30
@@ -263,7 +263,7 @@ jobs:
 
   notify:
     name: Notify Telegram
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
     needs: [resolve, decide, ota]
     if: ${{ always() && needs.resolve.result == 'success' && needs.decide.outputs.route == 'ota' }}
     steps:
