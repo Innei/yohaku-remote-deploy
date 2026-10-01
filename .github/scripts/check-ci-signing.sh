@@ -21,6 +21,12 @@ trap cleanup EXIT
 security create-keychain -p "$password" "$keychain"
 security set-keychain-settings -lut 600 "$keychain"
 security unlock-keychain -p "$password" "$keychain"
+python3 <<'PYKEYCHAIN'
+import os, pathlib, shlex, subprocess
+original = shlex.split((pathlib.Path(os.environ['RUNNER_TEMP']) / 'check-original-keychains.txt').read_text())
+keychain = str(pathlib.Path(os.environ['RUNNER_TEMP']) / 'check-signing.keychain-db')
+subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', keychain, *original], check=True)
+PYKEYCHAIN
 printf '%s' "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/check-dist.p12"
 security import "$RUNNER_TEMP/check-dist.p12" -k "$keychain" -P "$DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null
 /bin/bash "$(dirname "$0")/import-apple-intermediates.sh" "$keychain"
@@ -29,6 +35,8 @@ identities="$(security find-identity -v -p codesigning "$keychain")"
 identity="$(awk '/Apple Distribution:/{print $2; exit}' <<< "$identities")"
 if [ -z "$identity" ]; then
   printf '%s\n' "$identities"
+  security find-identity -p codesigning "$keychain"
+  security find-certificate -c 'Apple Distribution' -p "$keychain" | openssl x509 -noout -issuer -dates
   echo '::error::No valid Apple Distribution identity after importing the certificate chain.'
   exit 1
 fi

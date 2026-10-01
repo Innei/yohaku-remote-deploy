@@ -107,7 +107,13 @@ jobs:
         id: docker
         run: |
           set -euo pipefail
-          docker_host="$(docker context inspect "$(docker context show)" --format '{{.Endpoints.docker.Host}}')"
+          docker_host='unix:///Users/ci/.colima/default/docker.sock'
+          ready=false
+          for attempt in {1..60}; do
+            if docker --host "$docker_host" info >/dev/null 2>&1; then ready=true; break; fi
+            sleep 3
+          done
+          if [ "$ready" != true ]; then echo 'CI Docker daemon did not become ready'; exit 1; fi
           docker_config="$(mktemp -d "$RUNNER_TEMP/docker.XXXXXX")"
           mkdir -p "$docker_config/cli-plugins"
           # Prevent Docker from auto-selecting the macOS keychain helper.
