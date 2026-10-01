@@ -57,7 +57,7 @@ env:
 jobs:
   resolve:
     name: Resolve source
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     outputs:
       source_ref: ${{ steps.ref.outputs.source_ref }}
       notes: ${{ steps.ref.outputs.notes }}
@@ -109,7 +109,7 @@ jobs:
 
   fingerprint:
     name: Resolve iOS runtime fingerprint
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: resolve
     outputs:
       hash: ${{ steps.fp.outputs.hash }}
@@ -117,6 +117,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.resolve.outputs.source_ref }}
@@ -165,7 +166,7 @@ jobs:
 
   submit:
     name: Archive and upload
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [resolve, fingerprint]
     timeout-minutes: 120
     outputs:
@@ -180,6 +181,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.resolve.outputs.source_ref }}
@@ -224,6 +226,7 @@ jobs:
       - name: Checkout deploy scripts
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           path: .deploy
           sparse-checkout: .github/scripts
 
@@ -313,6 +316,9 @@ jobs:
         working-directory: ${{ env.MOBILE_DIR }}/ios
         run: |
           pod install --deployment || pod install
+
+      - name: Acquire shared CI signing lock
+        run: python3 /Users/ci/ci-self/bin/signing-lock.py acquire
 
       - name: Import signing assets
         env:
@@ -620,14 +626,17 @@ jobs:
           rm -f "$RUNNER_TEMP"/*.mobileprovision "$RUNNER_TEMP/app.plist" "$RUNNER_TEMP/notification-service.plist"
           rm -rf "$RUNNER_TEMP/original-profiles"
           rm -f "$RUNNER_TEMP/original-keychains.txt"
+          python3 /Users/ci/ci-self/bin/signing-lock.py release
 
   app-store:
     name: Confirm TestFlight availability
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: submit
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -647,7 +656,7 @@ jobs:
 
   record-baseline:
     name: Record iOS fingerprint baseline
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [fingerprint, submit, app-store]
     if: ${{ needs.app-store.result == 'success' }}
     permissions:
@@ -668,7 +677,7 @@ jobs:
 
   notify:
     name: Notify Telegram
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [resolve, submit, app-store]
     if: ${{ always() && needs.resolve.result == 'success' }}
     steps:

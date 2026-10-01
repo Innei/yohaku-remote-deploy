@@ -30,7 +30,7 @@ env:
 jobs:
   prepare:
     name: Prepare
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(hash-') }}
 
     outputs:
@@ -40,6 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           token: ${{ secrets.GH_PAT }}
 
       - name: Read HASH_FILE content
@@ -50,7 +51,7 @@ jobs:
 
   check:
     name: Check Should Rebuild
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: prepare
     outputs:
       canceled: ${{ steps.compare.outputs.canceled }}
@@ -60,6 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
           ref: ${{ env.SOURCE_REF }}
@@ -93,7 +95,7 @@ jobs:
 
   build:
     name: Build and Push to GHCR
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: check
     if: ${{ needs.check.outputs.canceled != 'true' }}
 
@@ -104,6 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.check.outputs.sha_full }}
@@ -132,7 +135,13 @@ jobs:
         id: docker
         run: |
           set -euo pipefail
-          docker_host="$(docker context inspect "$(docker context show)" --format '{{.Endpoints.docker.Host}}')"
+          docker_host='unix:///Users/ci/.colima/default/docker.sock'
+          ready=false
+          for attempt in {1..60}; do
+            if docker --host "$docker_host" info >/dev/null 2>&1; then ready=true; break; fi
+            sleep 3
+          done
+          if [ "$ready" != true ]; then echo 'CI Docker daemon did not become ready'; exit 1; fi
           docker_config="$(mktemp -d "$RUNNER_TEMP/docker.XXXXXX")"
           mkdir -p "$docker_config/cli-plugins"
           # Prevent Docker from auto-selecting the macOS keychain helper.
@@ -145,6 +154,11 @@ jobs:
             echo "DOCKER_CONFIG=$docker_config"
           } >> "$GITHUB_ENV"
           echo "host=$docker_host" >> "$GITHUB_OUTPUT"
+
+      - name: Enable linux/amd64 emulation in CI Docker
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: amd64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -183,7 +197,7 @@ jobs:
 
   deploy:
     name: Deploy via Dokploy
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: build
 
     steps:
@@ -339,7 +353,7 @@ jobs:
 
   store:
     name: Store artifact commit version
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [deploy, build]
 
     steps:
@@ -372,7 +386,7 @@ jobs:
 
   notify-failure:
     name: Notify Telegram (on failure)
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [prepare, check, build, deploy, store]
     if: ${{ always() && (needs.prepare.result == 'failure' || needs.check.result == 'failure' || needs.build.result == 'failure' || needs.deploy.result == 'failure' || needs.store.result == 'failure') }}
 

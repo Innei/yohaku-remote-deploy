@@ -41,7 +41,7 @@ env:
 jobs:
   resolve:
     name: Resolve source
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     outputs:
       source_ref: ${{ steps.ref.outputs.source_ref }}
       notes: ${{ steps.ref.outputs.notes }}
@@ -104,7 +104,7 @@ jobs:
 
   decide:
     name: Decide OTA or TestFlight
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: resolve
     outputs:
       route: ${{ steps.route.outputs.route }}
@@ -113,6 +113,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.resolve.outputs.source_ref }}
@@ -180,7 +181,7 @@ jobs:
 
   ota:
     name: Publish OTA
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [resolve, decide]
     if: ${{ needs.decide.outputs.route == 'ota' }}
     timeout-minutes: 30
@@ -191,6 +192,7 @@ jobs:
       - name: Checkout app
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
           token: ${{ secrets.GH_PAT }}
           ref: ${{ needs.resolve.outputs.source_ref }}
@@ -268,7 +270,7 @@ jobs:
 
   notify:
     name: Notify Telegram
-    runs-on: [self-hosted, macOS, ARM64, yohaku-remote-deploy]
+    runs-on: [self-hosted, macOS, ARM64, ci-account, yohaku-remote-deploy]
     needs: [resolve, decide, ota]
     if: ${{ always() && needs.resolve.result == 'success' && needs.decide.outputs.route == 'ota' }}
     steps:
