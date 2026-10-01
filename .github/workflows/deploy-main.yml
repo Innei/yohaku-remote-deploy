@@ -135,6 +135,8 @@ jobs:
           docker_host="$(docker context inspect "$(docker context show)" --format '{{.Endpoints.docker.Host}}')"
           docker_config="$(mktemp -d "$RUNNER_TEMP/docker.XXXXXX")"
           mkdir -p "$docker_config/cli-plugins"
+          # Prevent Docker from auto-selecting the macOS keychain helper.
+          printf '%s\n' '{"auths":{"https://index.docker.io/v1/":{}}}' > "$docker_config/config.json"
           if [ -x "$HOME/.docker/cli-plugins/docker-buildx" ]; then
             cp "$HOME/.docker/cli-plugins/docker-buildx" "$docker_config/cli-plugins/docker-buildx"
           fi
