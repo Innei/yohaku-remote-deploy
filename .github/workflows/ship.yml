@@ -220,6 +220,8 @@ jobs:
           node-version: 22
 
       - uses: oven-sh/setup-bun@v2
+        env:
+          HOME: ${{ runner.temp }}/bun-home
 
       - name: Link yohaku-oss node_modules
         working-directory: yohaku
