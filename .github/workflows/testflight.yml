@@ -115,7 +115,7 @@ jobs:
       hash: ${{ steps.fp.outputs.hash }}
     steps:
       - name: Checkout source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
@@ -179,7 +179,7 @@ jobs:
       EXPO_UPDATES_FINGERPRINT_OVERRIDE: ${{ needs.fingerprint.outputs.hash }}
     steps:
       - name: Checkout source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           repository: ${{ env.APP_REPO_SLUG }}
@@ -224,7 +224,7 @@ jobs:
         run: pnpm install --frozen-lockfile --filter @yohaku/mobile...
 
       - name: Checkout deploy scripts
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           path: .deploy
@@ -634,7 +634,7 @@ jobs:
     needs: submit
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 

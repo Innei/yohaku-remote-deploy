@@ -48,7 +48,7 @@ jobs:
           xcbeautify --version
 
       - name: Checkout source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: innei-dev/yohaku
           token: ${{ secrets.GH_PAT }}
@@ -58,7 +58,7 @@ jobs:
           submodules: recursive
 
       - name: Checkout deploy scripts (nested checkout regression)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: .deploy
           persist-credentials: false
