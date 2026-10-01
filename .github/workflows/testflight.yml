@@ -196,8 +196,9 @@ jobs:
 
       - name: Verify local Xcode
         run: |
-          xcodebuild -version
-          xcodebuild -version | grep -q '^Xcode 27\.'
+          xcode_version="$(xcodebuild -version)"
+          printf '%s\n' "$xcode_version"
+          grep -q '^Xcode 27\.' <<< "$xcode_version"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
