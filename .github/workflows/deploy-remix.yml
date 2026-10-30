@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           token: ${{ secrets.GH_PAT }}
@@ -59,7 +59,7 @@ jobs:
       sha_short: ${{ steps.compare.outputs.sha_short }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           repository: innei-dev/yohaku
@@ -104,7 +104,7 @@ jobs:
       sha_full: ${{ needs.check.outputs.sha_full }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           repository: innei-dev/yohaku
@@ -358,7 +358,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GH_PAT }}
           persist-credentials: false
