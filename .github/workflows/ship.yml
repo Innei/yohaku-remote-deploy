@@ -224,9 +224,12 @@ jobs:
         with:
           node-version: 22
 
-      - uses: oven-sh/setup-bun@v2
-        env:
-          HOME: ${{ runner.temp }}/bun-home
+      - name: Install Bun from npm
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/bun" --ignore-scripts --no-audit --no-fund bun@1.4.4
+          node "$RUNNER_TEMP/bun/lib/node_modules/bun/install.js"
+          echo "$RUNNER_TEMP/bun/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bun/bin/bun" --version
 
       - name: Link yohaku-oss node_modules
         working-directory: yohaku
